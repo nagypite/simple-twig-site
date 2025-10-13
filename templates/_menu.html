@@ -1,7 +1,7 @@
-<ul class="navbar-nav me-auto mb-2 mb-md-0">
+<ul class="navbar-nav mb-2 mb-md-0 fs-6">
   {% for item in menu %}
-  <li class="nav-item">
-    <a class="nav-link {{ item.classes|join(' ') }}" aria-current="page" href="{{ item.url }}" {% if item.disabled %} disabled{% endif %}>{{ item.label }}</a>
+  <li class="nav-item {{ item.classes|join(' ') }}">
+    <a class="nav-link" aria-current="page" href="{{ item.url }}" {% if item.disabled %} disabled{% endif %}>{{ item.label }}{% if item.label_cn %} <span class="text-cn d-md-none">{{ item.label_cn }}</span>{% endif %}</a>
   </li>
   {% endfor %}
 </ul>

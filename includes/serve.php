@@ -1,6 +1,9 @@
 <?php
 
 function serve($path, $variables = [], $status = 200) {
+  # replace non-allowed characters
+  $path = preg_replace('/[^a-zA-Z0-9\/_\-]+/', '-', $path);
+
   $path_files = resolve_path($path);
 
   $variables = array_merge([
@@ -37,15 +40,16 @@ function check_path($path) {
 
 function resolve_path($path) {
   $path_dir = PAGES_PATH.'/'.$path;
+  $path_files = [];
   if (is_dir($path_dir)) {
-    $path_files = [];
     if (file_exists($path_dir.'/content.html')) {
       $path_files['content'] = $path.'/content.html';
     }
-
-    return empty($path_files) ? false : $path_files;
+  }
+  else if (file_exists($path_dir.'.html')) {
+    $path_files['content'] = $path.'.html';
   }
 
-  return false;
+  return empty($path_files) ? false : $path_files;
 }
 

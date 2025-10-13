@@ -1,5 +1,10 @@
 {
     "require": {
-        "twig/twig": "^3.0"
-    }
+        "twig/twig": "^3.0",
+        "twbs/bootstrap": "5.3.3",
+        "scssphp/scssphp": "^1.13"
+    },
+     "scripts": {
+        "compile-scss": "php compile-scss.php"
+     }
 }

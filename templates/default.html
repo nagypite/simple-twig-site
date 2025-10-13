@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en" data-bs-theme="auto">
-  <head><script src="/assets/js/color-modes.js"></script>
+  <head>
 
     <meta charset="utf-8">
     {% block meta %}
@@ -12,11 +12,18 @@
     {% endblock %}
 
     {% block css %}
-    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/assets/css/style.css" rel="stylesheet">
+    <style>
+      /* Force scrollbar to always be visible to prevent layout shifts */
+      html {
+        overflow-y: scroll;
+        overflow-x: hidden;
+      }
+    </style>
     {% endblock %}
 
   </head>
-  <body>
+  <body class="path-{{path}} {% block body_class %}bamboo{% endblock %} pt-4 pb-5">
     <div class="dropdown position-fixed bottom-0 end-0 mb-3 me-3 bd-mode-toggle">
       <button class="btn btn-bd-primary py-2 dropdown-toggle d-flex align-items-center"
               id="bd-theme"
@@ -54,7 +61,7 @@
 
   {% block header %}
   <header>
-    <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark">
+    <nav class="navbar navbar-expand-md">
       <div class="container">
         <a class="navbar-brand" href="#">{{ sitename }}</a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">

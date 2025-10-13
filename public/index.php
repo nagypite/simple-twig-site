@@ -15,9 +15,14 @@ if (isset($_REQUEST['path'])) {
 }
 else if (!empty($_SERVER['REQUEST_URI']) && $_SERVER['REQUEST_URI'] !== '/') {
   $path = substr($_SERVER['REQUEST_URI'], 1);
+  // remove query string
+  $pos = strpos($path, '?');
+  if ($pos !== false) {
+    $path = substr($path, 0, $pos);
+  }
 }
 
-if (empty($path)) {
+if (empty($path) || in_array($path, ['index.php'])) {
   $path = 'index';
 }
 

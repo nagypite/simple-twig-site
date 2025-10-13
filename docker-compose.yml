@@ -1,0 +1,14 @@
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./:/var/www/html
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - php
+  php:
+    image: php:8.3-fpm-alpine # or your preferred version
+    volumes:
+      - ./:/var/www/html

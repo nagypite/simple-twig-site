@@ -10,5 +10,7 @@ function build_menu($path = NULL) {
     $item['url'] = preg_match('/^(https?:\/)?\//', $item['path']) ? $item['path'] : '/'.$item['path'];
 
     return $item;
-  }, $GLOBALS['config']['menu']);
+  }, array_filter($GLOBALS['config']['menu'], function($item) use ($path) {
+    return empty($item['hide_on_paths']) || !in_array($path, $item['hide_on_paths']);
+  }));
 }

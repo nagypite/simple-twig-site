@@ -1,0 +1,35 @@
+// scss/_variables.scss
+
+// Light Theme Colors
+:root,
+[data-bs-theme="light"] {
+  --bs-body-bg: #fffffa;
+  --bs-body-color: #a0a0a0;
+  --bs-post-color: #303030;
+  --bs-primary: #d65d3c;
+  --bs-secondary: #6c757d;
+  --bs-link-color: #007bff;
+  --bs-link-hover-color: #{darken(#007bff, 15%)};
+
+  --bs-menu-bg: #b0b0b0;
+  --bs-menu-color: #303030;
+  --bs-menu-active-bg: var(--bs-secondary);
+  --bs-menu-active-color: var(--bs-body-bg);
+  --bs-menu-hover-bg: #d0d0d0;
+  --bs-menu-hover-color: #606060;
+
+  --bs-bg-image-filter: none;
+}
+
+// Dark Theme Colors
+[data-bs-theme="dark"] {
+  --bs-body-bg: #343a40;
+  --bs-body-color: #a0a0a0;
+  --bs-post-color: #d0d0d0;
+  --bs-primary: #d65d3c;
+  --bs-secondary: #868e96;
+  --bs-link-color: #00bfff;
+  --bs-link-hover-color: #{lighten(#00bfff, 15%)};
+
+  --bs-bg-image-filter: invert(1);
+}
