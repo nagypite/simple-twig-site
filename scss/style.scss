@@ -3,9 +3,9 @@
 @import "bootstrap"; // Bootstrap
 @import "./_variables.scss"; // Import local variables
 
+@import "custom.scss";
 // Optional:  Import specific Bootstrap components if you only need some.  For example:
 //@import "../vendor/twbs/bootstrap/scss/mixins";
 //@import "../vendor/twbs/bootstrap/scss/utilities";
 //@import "../vendor/twbs/bootstrap/scss/buttons";
 // Add your custom styles here
-

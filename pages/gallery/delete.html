@@ -1,0 +1,56 @@
+{% extends "gallery.html" %}
+
+{% block title %}Törlés: {{ content.title|default('Galéria') }} - {{sitename}}{% endblock %}
+
+{% block main %}
+<main class="gallery page container mt-5">
+    <div class="article-header bg-white shadow p-3 px-md-5 mb-4 fs-6 rounded">
+        <div class="breadcrumbs">
+            <ul class="list-inline mb-0">
+                <li class="list-inline-item"><a href="/galeria" title="Vissza a galériák oldalra">Galériák</a></li>
+                <li class="list-inline-item"><a href="/galeria/edit/{{ content.id }}" title="Vissza a szerkesztéshez">Szerkesztés</a></li>
+                <li class="list-inline-item">Törlés</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="article-content bg-white shadow p-3 p-md-5 rounded">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% elseif request.error %}
+        <div class="alert alert-danger" role="alert">
+            {{ request.error }}
+        </div>
+        {% endif %}
+
+        <h1>Galéria törlése</h1>
+
+        <div class="alert alert-warning" role="alert">
+            <strong>Figyelem!</strong> Biztosan törölni szeretnéd ezt a galériát?
+        </div>
+
+        <div class="mb-4">
+            <h2>{{ content.title }}</h2>
+            <p class="text-muted">
+                URL azonosító: {{ content.stub }}
+            </p>
+        </div>
+
+        <p class="mb-4">
+            A törlés végleges és visszavonhatatlan. A galéria és az összes kapcsolódó adat törlődni fog.
+        </p>
+
+        <form method="POST" action="/galeria/delete/{{ content.id }}">
+            <div class="d-flex justify-content-between mt-4">
+                <a href="/galeria/edit/{{ content.id }}" class="btn btn-secondary">Mégse</a>
+                <button type="submit" class="btn btn-danger btn-lg">
+                    <i class="fas fa-trash"></i> Törlés megerősítése
+                </button>
+            </div>
+        </form>
+    </div>
+</main>
+{% endblock %}
+

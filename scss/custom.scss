@@ -1,0 +1,5 @@
+.nav-item.active .nav-link-inner {
+    border-bottom: 2px solid var(--bs-primary);
+    color: var(--bs-primary);
+    font-weight: bold;
+}

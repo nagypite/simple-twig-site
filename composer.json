@@ -2,7 +2,9 @@
     "require": {
         "twig/twig": "^3.0",
         "twbs/bootstrap": "5.3.3",
-        "scssphp/scssphp": "^1.13"
+        "scssphp/scssphp": "^1.13",
+        "twig/markdown-extra": "^3.12",
+        "michelf/php-markdown": "^2.0"
     },
      "scripts": {
         "compile-scss": "php compile-scss.php"

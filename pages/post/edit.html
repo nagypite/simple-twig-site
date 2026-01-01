@@ -1,0 +1,127 @@
+{% extends "page.html" %}
+
+{% block title %}{% if action == 'add' %}Create new post{% else %}Edit post: {{ content.title|default('Post') }}{% endif %} - {{sitename}}{% endblock %}
+
+{% block content %}
+<main class="post post-edit container mt-5">
+    <div class="bg-white shadow p-3 p-md-5 rounded">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% elseif request.error %}
+        <div class="alert alert-danger" role="alert">
+            {{ request.error }}
+        </div>
+        {% endif %}
+
+        <h1>{% if action == 'add' %}Create new post{% else %}Edit post{% endif %}</h1>
+
+        <form method="POST" action="/post/save" id="content-form">
+            {% if content.id %}
+            <input type="hidden" name="content_id" value="{{ content.id }}">
+            {% endif %}
+            {% if request.redirect %}
+            <input type="hidden" name="redirect" value="{{ request.redirect }}">
+            {% endif %}
+
+            <div class="mb-3">
+                <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="title" name="title" value="{{ content.title|default('')|escape }}" required>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="date" name="date" value="{{ content.date|default('') }}" required>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label for="stub" class="form-label">Stub <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="stub" name="stub" value="{{ content.stub|default('') }}" required pattern="[a-z0-9\-]+" title="Only lowercase letters, numbers and hyphens are allowed" {% if action == 'edit' or content.id %}data-edited="true"{% endif %}>
+                    <small class="form-text text-muted">URL-friendly identifier, e.g: post-title-in-url</small>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="editor" class="form-label">Content <span class="text-danger">*</span></label>
+                <div id="editor"></div>
+                <input type="hidden" id="content" name="content">
+            </div>
+
+            <div class="d-flex justify-content-between mt-4">
+                <a href="{% if content.id %}/posts{% else %}/posts{% endif %}" class="btn btn-secondary">Cancel</a>
+                <div>
+                    {% if content.id %}
+                    <a href="/post/delete/{{ content.id }}" class="btn btn-danger me-2">
+                        <i class="fas fa-trash"></i> Delete
+                    </a>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</main>
+{% endblock %}
+
+{% block css %}
+{{ parent() }}
+<link rel="stylesheet" href="https://cdn.ckeditor.com/ckeditor5/47.2.0/ckeditor5.css" crossorigin>
+{% endblock %}
+
+{% block js %}
+{{ parent() }}
+<script src="https://cdn.ckeditor.com/ckeditor5/47.2.0/ckeditor5.umd.js" crossorigin></script>
+<script>
+    // Set CKEditor license key from config
+    window.CKEDITOR_LICENSE_KEY = {% if ckeditor.license_key %}'{{ ckeditor.license_key }}'{% else %}null{% endif %};
+</script>
+<script src="/assets/js/ckeditor.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get HTML content converted from markdown on server side
+    // CKEditor with Markdown plugin can accept HTML via setData() and output markdown via getData()
+    var editorContentHtml = {% if content.content %}{{ (content.content|markdown_to_html_raw)|json_encode|raw }}{% else %}''{% endif %};
+    var editor = null;
+    
+    // Initialize CKEditor with HTML content (converted from markdown on server)
+    // The Markdown plugin will automatically output markdown when getData() is called
+    const editorElement = document.querySelector('#editor');
+    if (editorElement) {
+        createCKEditor(editorElement, editorContentHtml)
+            .then(editorInstance => {
+                editor = editorInstance;
+                window.ckeditorInstance = editorInstance;
+            })
+            .catch(error => {
+                console.error('Error initializing CKEditor:', error);
+            });
+    }
+    
+    const form = document.getElementById('content-form');
+    form.addEventListener('submit', function(e) {
+        if (!editor) {
+            console.error('Editor not initialized');
+            e.preventDefault();
+            return false;
+        }
+        
+        // Get markdown content directly from CKEditor
+        // The Markdown plugin automatically outputs markdown format
+        const markdownContent = editor.getData();
+        
+        const contentField = document.getElementById('content');
+        if (!contentField) {
+            console.error('Content field not found');
+            e.preventDefault();
+            return false;
+        }
+        
+        contentField.value = markdownContent;
+        console.log('Setting content field value, length:', markdownContent.length);
+    });
+});
+</script>
+{% include "_edit_generate_stub.html" %}
+{% endblock %}

@@ -1,0 +1,261 @@
+{# Reusable image upload component with FilePond
+   Parameters:
+   - content_type: 'gallery' or 'post' (required)
+   - content_id: ID of the content item, or null for new items (required)
+   - current_image: Current image filename (optional)
+   - field_id: ID for the hidden input field (default: 'image')
+   - field_name: Name for the hidden input field (default: 'image')
+   - container_id: ID for the FilePond container (default: 'filepond-container')
+   - modal_id: ID for the image picker modal (default: 'imagePickerModal')
+#}
+{% set field_id = field_id|default('image') %}
+{% set field_name = field_name|default('image') %}
+{% set container_id = container_id|default('filepond-container') %}
+{% set modal_id = modal_id|default('imagePickerModal') %}
+{% set browse_btn_id = 'browse-images-btn-' ~ field_id %}
+{% set preview_id = 'image-preview-' ~ field_id %}
+{% set loading_id = 'image-picker-loading-' ~ field_id %}
+{% set grid_id = 'image-picker-grid-' ~ field_id %}
+{% set empty_id = 'image-picker-empty-' ~ field_id %}
+
+<div class="mb-3">
+    <label for="{{ field_id }}" class="form-label">Kép</label>
+    <input type="hidden" id="{{ field_id }}" name="{{ field_name }}" value="{{ current_image|default('') }}">
+    <div class="mb-2">
+        <div id="{{ container_id }}"></div>
+    </div>
+    <div class="mb-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="{{ browse_btn_id }}">
+            <i class="fas fa-images"></i> Képek böngészése
+        </button>
+    </div>
+    <div id="image-preview-container-{{ field_id }}" class="mt-2">
+        {% if current_image and content_id %}
+        <img src="/content/{{ content_type }}/images/{{ content_id }}/{{ current_image }}" alt="Preview" class="img-thumbnail" style="max-width: 300px; max-height: 300px;" id="{{ preview_id }}">
+        {% else %}
+        <img src="" alt="Preview" class="img-thumbnail d-none" style="max-width: 300px; max-height: 300px;" id="{{ preview_id }}">
+        {% endif %}
+    </div>
+    <small class="form-text text-muted">Töltsön fel egy képet vagy válasszon egy meglévőt a böngészés gombbal.</small>
+</div>
+
+<!-- Image Picker Modal -->
+<div class="modal fade" id="{{ modal_id }}" tabindex="-1" aria-labelledby="{{ modal_id }}Label" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="{{ modal_id }}Label">Kép kiválasztása</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="{{ loading_id }}" class="text-center py-4">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Betöltés...</span>
+                    </div>
+                </div>
+                <div id="{{ grid_id }}" class="row g-3" style="display: none;">
+                    <!-- Images will be inserted here -->
+                </div>
+                <div id="{{ empty_id }}" class="text-center py-4 text-muted" style="display: none;">
+                    Nincsenek elérhető képek.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Mégse</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Note: CSS and JS should be included in the parent template's css/js blocks #}
+
+<script>
+(function() {
+    var uploadConfig_{{ field_id|replace({'-': '_'}) }} = {
+        contentType: '{{ content_type }}',
+        contentId: {% if content_id %}{{ content_id }}{% else %}null{% endif %},
+        currentImage: '{{ current_image|default('')|e('js') }}',
+        fieldId: '{{ field_id }}',
+        fieldName: '{{ field_name }}',
+        containerId: '{{ container_id }}',
+        modalId: '{{ modal_id }}',
+        browseBtnId: '{{ browse_btn_id }}',
+        previewId: '{{ preview_id }}',
+        loadingId: '{{ loading_id }}',
+        gridId: '{{ grid_id }}',
+        emptyId: '{{ empty_id }}'
+    };
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const config = uploadConfig_{{ field_id|replace({'-': '_'}) }};
+        const imageInput = document.getElementById(config.fieldId);
+        const imagePreview = document.getElementById(config.previewId);
+        const browseBtn = document.getElementById(config.browseBtnId);
+        const imagePickerModal = new bootstrap.Modal(document.getElementById(config.modalId));
+        
+        // Initialize FilePond
+        const pond = FilePond.create(document.querySelector('#' + config.containerId), {
+            name: 'filepond',
+            allowMultiple: false,
+            acceptedFileTypes: ['image/*'],
+            maxFileSize: '5MB',
+            server: {
+                process: (fieldName, file, metadata, load, error, progress, abort, transfer, options) => {
+                    const formData = new FormData();
+                    formData.append('filepond', file);
+                    formData.append('content_type', config.contentType);
+                    formData.append('content_id', config.contentId || '');
+                    formData.append('target_attribute', config.fieldName);
+                    
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/api/upload');
+                    
+                    xhr.onload = function() {
+                        if (xhr.status === 200) {
+                            try {
+                                const result = JSON.parse(xhr.responseText);
+                                if (result.success) {
+                                    imageInput.value = result.filename;
+                                    updateImagePreview(result.url);
+                                    load(result.filename);
+                                } else {
+                                    error(result.error || 'Upload failed');
+                                }
+                            } catch (e) {
+                                error('Invalid response from server');
+                            }
+                        } else {
+                            try {
+                                const result = JSON.parse(xhr.responseText);
+                                error(result.error || 'Upload failed with status: ' + xhr.status);
+                            } catch (e) {
+                                error('Upload failed with status: ' + xhr.status);
+                            }
+                        }
+                    };
+                    
+                    xhr.onerror = function() {
+                        error('Network error');
+                    };
+                    
+                    xhr.upload.onprogress = function(e) {
+                        if (e.lengthComputable) {
+                            progress(e.loaded, e.total);
+                        }
+                    };
+                    
+                    xhr.send(formData);
+                    
+                    return {
+                        abort: () => {
+                            xhr.abort();
+                            abort();
+                        }
+                    };
+                },
+                revert: null,
+                restore: null,
+                load: null
+            }
+        });
+        
+        // Update image preview
+        function updateImagePreview(url) {
+            if (url) {
+                imagePreview.src = url;
+                imagePreview.classList.remove('d-none');
+            } else {
+                imagePreview.classList.add('d-none');
+            }
+        }
+        
+        // Initialize preview if there's a current image
+        if (config.currentImage && config.currentImage !== '' && config.contentId) {
+            updateImagePreview('/content/' + config.contentType + '/images/' + config.contentId + '/' + config.currentImage);
+        }
+        
+        // Browse images button click
+        browseBtn.addEventListener('click', function() {
+            loadImagesForPicker();
+            imagePickerModal.show();
+        });
+        
+        // Load images for picker
+        function loadImagesForPicker() {
+            const loadingEl = document.getElementById(config.loadingId);
+            const gridEl = document.getElementById(config.gridId);
+            const emptyEl = document.getElementById(config.emptyId);
+            
+            loadingEl.style.display = 'block';
+            gridEl.style.display = 'none';
+            emptyEl.style.display = 'none';
+            gridEl.innerHTML = '';
+            
+            const url = '/api/list-images?content_type=' + config.contentType + '&content_id=' + (config.contentId || '') + '&target_attribute=' + config.fieldName;
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    loadingEl.style.display = 'none';
+                    
+                    if (data.success && data.images && data.images.length > 0) {
+                        gridEl.style.display = 'flex';
+                        
+                        data.images.forEach(function(image) {
+                            const col = document.createElement('div');
+                            col.className = 'col-md-3 col-sm-4 col-6';
+                            
+                            const card = document.createElement('div');
+                            card.className = 'card h-100';
+                            card.style.cursor = 'pointer';
+                            card.addEventListener('click', function() {
+                                selectImage(image);
+                            });
+                            
+                            const img = document.createElement('img');
+                            img.src = image.thumbnail_url;
+                            img.className = 'card-img-top';
+                            img.style.objectFit = 'cover';
+                            img.style.height = '150px';
+                            img.alt = image.filename;
+                            
+                            const cardBody = document.createElement('div');
+                            cardBody.className = 'card-body p-2';
+                            
+                            const filename = document.createElement('small');
+                            filename.className = 'text-muted text-truncate d-block';
+                            filename.textContent = image.filename;
+                            filename.title = image.filename;
+                            
+                            cardBody.appendChild(filename);
+                            card.appendChild(img);
+                            card.appendChild(cardBody);
+                            col.appendChild(card);
+                            gridEl.appendChild(col);
+                        });
+                    } else {
+                        emptyEl.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    loadingEl.style.display = 'none';
+                    console.error('Error loading images:', error);
+                    alert('Hiba történt a képek betöltése során.');
+                });
+        }
+        
+        // Select image from picker
+        function selectImage(image) {
+            imageInput.value = image.filename;
+            updateImagePreview(image.url);
+            
+            // Clear FilePond
+            pond.removeFiles();
+            
+            // Close modal
+            imagePickerModal.hide();
+        }
+    });
+})();
+</script>
+

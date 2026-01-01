@@ -1,0 +1,617 @@
+{% extends "gallery.html" %}
+
+{% block title %}{% if action == 'add' %}New gallery creation{% else %}Edit: {{ content.title|default('Gallery') }}{% endif %} - {{sitename}}{% endblock %}
+
+{% block main %}
+<main class="gallery gallery-view container mt-5">
+    <div class="article-header bg-white shadow p-3 px-md-5 mb-4 fs-6 rounded">
+        <div class="breadcrumbs">
+            <ul class="list-inline mb-0">
+                <li class="list-inline-item"><a href="/gallery" title="Back to the galleries page">Galleries</a></li>
+                {% if action == 'edit' and content.id %}
+                <li class="list-inline-item"><a href="/gallery/{{ content.id }}-{{ content.stub }}" title="Back to the gallery">Edit</a></li>
+                {% else %}
+                <li class="list-inline-item">{% if action == 'add' %}New gallery{% else %}Edit{% endif %}</li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+
+    <div class="gallery-content bg-white shadow p-3 p-md-5 rounded">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% elseif request.error %}
+        <div class="alert alert-danger" role="alert">
+            {{ request.error }}
+        </div>
+        {% endif %}
+
+        <h1>{% if action == 'add' %}Create new gallery{% else %}Gallery edit{% endif %}</h1>
+
+        <form method="POST" action="/gallery/save" id="content-form">
+            {% if content.id %}
+            <input type="hidden" name="content_id" value="{{ content.id }}">
+            {% endif %}
+
+            <div class="mb-3">
+                <label for="title" class="form-label">Title <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="title" name="title" value="{{ content.title|default('')|escape }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="stub" class="form-label">URL identifier (stub) <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="stub" name="stub" value="{{ content.stub|default('') }}" required pattern="[a-z0-9\-]+" title="Only lowercase letters, numbers and hyphens are allowed" {% if action == 'edit' or content.id %}data-edited="true"{% endif %}>
+                <small class="form-text text-muted">URL-friendly identifier, e.g: gallery-name-in-url</small>
+            </div>
+
+            {% include "_upload.html" with {
+                'content_type': 'gallery',
+                'content_id': content.id|default(null),
+                'current_image': content.image|default('')
+            } %}
+
+            <div class="mb-3">
+                <label for="editor" class="form-label">Content <span class="text-danger">*</span></label>
+                <div id="editor"></div>
+                <input type="hidden" id="content" name="content">
+                <small class="form-text text-muted">Only the images will be displayed with the optional image descriptions.</small>
+            </div>
+
+            <div class="d-flex justify-content-between mt-4">
+                <a href="{% if content.id %}/gallery/{{ content.id }}-{{ content.stub }}{% else %}/gallery{% endif %}" class="btn btn-secondary">Cancel</a>
+                <div>
+                    {% if content.id %}
+                    <a href="/gallery/delete/{{ content.id }}" class="btn btn-danger me-2">
+                        <i class="fas fa-trash"></i> Delete
+                    </a>
+                    {% endif %}
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</main>
+{% endblock %}
+
+{% block css %}
+{{ parent() }}
+<link href="/assets/filepond/filepond.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.ckeditor.com/ckeditor5/47.2.0/ckeditor5.css" crossorigin>
+{% endblock %}
+
+{% block js %}
+{{ parent() }}
+<script src="/assets/filepond/filepond.min.js"></script>
+<script src="https://cdn.ckeditor.com/ckeditor5/47.2.0/ckeditor5.umd.js" crossorigin></script>
+<script>
+    // Set CKEditor license key from config
+    window.CKEDITOR_LICENSE_KEY = {% if ckeditor.license_key %}'{{ ckeditor.license_key }}'{% else %}null{% endif %};
+</script>
+<script src="/assets/js/ckeditor.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get HTML content converted from markdown on server side
+    // CKEditor with Markdown plugin can accept HTML via setData() and output markdown via getData()
+    var editorContentHtml = {% if content.content %}{{ (content.content|markdown_to_html_raw)|json_encode|raw }}{% else %}''{% endif %};
+    var contentId = {% if content.id %}{{ content.id }}{% else %}null{% endif %};
+    var editor = null;
+    
+    // Initialize CKEditor with HTML content (converted from markdown on server)
+    // The Markdown plugin will automatically output markdown when getData() is called
+    const editorElement = document.querySelector('#editor');
+    if (editorElement) {
+        createCKEditor(editorElement, editorContentHtml)
+            .then(editorInstance => {
+                editor = editorInstance;
+                window.ckeditorInstance = editorInstance;
+                
+                // Customize image insert button to show our custom modal
+                customizeImageInsertButton(editorInstance);
+            })
+            .catch(error => {
+                console.error('Error initializing CKEditor:', error);
+            });
+    }
+    
+    // Function to customize the image insert button
+    function customizeImageInsertButton(editorInstance) {
+        // Override the command's execute method
+        const command = editorInstance.commands.get('insertImageViaUrl');
+        if (command) {
+            console.log('Found insertImageViaUrl command, overriding...');
+            const originalExecute = command.execute;
+            command.execute = function(...args) {
+                console.log('insertImageViaUrl command executed - showing custom modal');
+                showCustomImageInsertModal();
+                // Don't call original
+            };
+        } else {
+            console.warn('insertImageViaUrl command not found');
+        }
+        
+        // Also intercept at the UI level - watch for dialog opening
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                mutation.addedNodes.forEach(function(node) {
+                    if (node.nodeType === 1) { // Element node
+                        // Check if it's CKEditor's image dialog
+                        if (node.classList && node.classList.contains('ck-dialog')) {
+                            const dialogTitle = node.querySelector('.ck-dialog__title');
+                            if (dialogTitle && (dialogTitle.textContent.includes('Kép') || dialogTitle.textContent.includes('image'))) {
+                                console.log('CKEditor image dialog detected, hiding and showing custom modal');
+                                // Hide CKEditor dialog
+                                node.style.display = 'none';
+                                // Show our custom modal
+                                setTimeout(() => {
+                                    showCustomImageInsertModal();
+                                }, 100);
+                            }
+                        }
+                    }
+                });
+            });
+        });
+        
+        // Observe the editor's DOM for dialog additions
+        const editorElement = editorInstance.ui.getEditableElement();
+        if (editorElement && editorElement.parentElement) {
+            observer.observe(editorElement.parentElement.parentElement || document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+        
+        // Also try to find and replace the button click handler
+        setTimeout(() => {
+            const editorContainer = editorElement ? editorElement.closest('.ck-editor') : null;
+            if (editorContainer) {
+                const buttons = editorContainer.querySelectorAll('.ck-button[data-cke-tooltip-text*="Kép"], .ck-button[data-cke-tooltip-text*="image"]');
+                buttons.forEach(button => {
+                    const tooltip = button.getAttribute('data-cke-tooltip-text');
+                    if (tooltip && (tooltip.includes('Insert image') || tooltip.includes('Insert image'))) {
+                        console.log('Found image button in DOM, adding click handler');
+                        button.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.stopImmediatePropagation();
+                            console.log('Image button clicked, showing custom modal');
+                            showCustomImageInsertModal();
+                            return false;
+                        }, true);
+                    }
+                });
+            }
+        }, 500);
+    }
+    
+    // Variable to store selected image URL from browser
+    let selectedImageUrl = null;
+    
+    // Create custom image insert modal with FilePond and browser
+    const customImageModal = document.createElement('div');
+    customImageModal.className = 'modal fade';
+    customImageModal.id = 'customImageInsertModal';
+    customImageModal.setAttribute('tabindex', '-1');
+    customImageModal.innerHTML = `
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Insert image</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                    <ul class="nav nav-tabs mb-3" id="imageInsertTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-pane" type="button" role="tab">
+                                <i class="fas fa-upload"></i> Upload
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="browse-tab" data-bs-toggle="tab" data-bs-target="#browse-pane" type="button" role="tab">
+                                <i class="fas fa-images"></i> Browse
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="url-tab" data-bs-toggle="tab" data-bs-target="#url-pane" type="button" role="tab">
+                                <i class="fas fa-link"></i> URL
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="imageInsertTabContent">
+                        <div class="tab-pane fade show active" id="upload-pane" role="tabpanel">
+                            <div class="mb-3">
+                                <label class="form-label">Kép feltöltése</label>
+                                <div id="editor-filepond-upload"></div>
+                                <small class="form-text text-muted">Húzza ide a képet vagy kattintson a feltöltéshez</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="uploaded-image-alt" class="form-label">Alternatív szöveg (alt)</label>
+                                <input type="text" class="form-control" id="uploaded-image-alt" placeholder="Kép leírása">
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="browse-pane" role="tabpanel">
+                            <div class="mb-3" style="max-height: 50vh; overflow-y: auto;">
+                                <label class="form-label">Kép kiválasztása</label>
+                                <div id="editor-image-picker-loading" class="text-center py-4 d-none">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Betöltés...</span>
+                                    </div>
+                                </div>
+                                <div id="editor-image-picker-grid" class="row g-2 d-none">
+                                    <!-- Images will be inserted here -->
+                                </div>
+                                <div id="editor-image-picker-empty" class="text-center py-4 text-muted d-none">
+                                    Nincsenek elérhető képek.
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="browsed-image-alt" class="form-label">Alternatív szöveg (alt)</label>
+                                <input type="text" class="form-control" id="browsed-image-alt" placeholder="Kép leírása">
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="url-pane" role="tabpanel">
+                            <div class="mb-3">
+                                <label for="image-url-input" class="form-label">Image URL</label>
+                                <input type="url" class="form-control" id="image-url-input" placeholder="https://example.com/image.png">
+                            </div>
+                            <div class="mb-3">
+                                <label for="url-image-alt" class="form-label">Alternative text (alt)</label>
+                                <input type="text" class="form-control" id="url-image-alt" placeholder="Image description">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="insert-image-btn">Insert</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(customImageModal);
+    const customImageModalInstance = new bootstrap.Modal(customImageModal);
+    
+    // Function to show custom image insert modal
+    function showCustomImageInsertModal() {
+        console.log('showCustomImageInsertModal called');
+        
+        // Make sure modal exists
+        if (!customImageModalInstance) {
+            console.error('Custom image modal not initialized');
+            return;
+        }
+        
+        // Reset form
+        const urlInput = document.getElementById('image-url-input');
+        const urlAlt = document.getElementById('url-image-alt');
+        const uploadedAlt = document.getElementById('uploaded-image-alt');
+        const browsedAlt = document.getElementById('browsed-image-alt');
+        
+        if (urlInput) urlInput.value = '';
+        if (urlAlt) urlAlt.value = '';
+        if (uploadedAlt) uploadedAlt.value = '';
+        if (browsedAlt) browsedAlt.value = '';
+        
+        // Reset selected image
+        selectedImageUrl = null;
+        uploadedImageUrls = [];
+        
+        // Switch to first tab
+        const firstTab = document.getElementById('upload-tab');
+        if (firstTab) {
+            const tab = new bootstrap.Tab(firstTab);
+            tab.show();
+        }
+        
+        customImageModalInstance.show();
+    }
+    
+    // Initialize FilePond for editor image uploads
+    let editorFilePond = null;
+    let uploadedImageUrls = [];
+    
+    // Initialize FilePond when modal is shown
+    customImageModal.addEventListener('shown.bs.modal', function() {
+        if (!editorFilePond) {
+            const container = document.getElementById('editor-filepond-upload');
+            if (container && !container.querySelector('.filepond--root')) {
+                editorFilePond = FilePond.create(container, {
+                    name: 'filepond',
+                    allowMultiple: true,
+                    acceptedFileTypes: ['image/*'],
+                    maxFileSize: '5MB',
+                    server: {
+                        process: (fieldName, file, metadata, load, error, progress, abort) => {
+                            const formData = new FormData();
+                            formData.append('filepond', file);
+                            formData.append('content_type', 'gallery');
+                            formData.append('content_id', contentId || '');
+                            formData.append('target_attribute', 'image');
+                            
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', '/api/upload');
+                            
+                            xhr.onload = function() {
+                                if (xhr.status === 200) {
+                                    try {
+                                        const result = JSON.parse(xhr.responseText);
+                                        if (result.success) {
+                                            // Store URL for later insertion
+                                            uploadedImageUrls.push(result.url);
+                                            load(result.filename);
+                                        } else {
+                                            error(result.error || 'Upload failed');
+                                        }
+                                    } catch (e) {
+                                        error('Invalid response from server');
+                                    }
+                                } else {
+                                    try {
+                                        const result = JSON.parse(xhr.responseText);
+                                        error(result.error || 'Upload failed with status: ' + xhr.status);
+                                    } catch (e) {
+                                        error('Upload failed with status: ' + xhr.status);
+                                    }
+                                }
+                            };
+                            
+                            xhr.onerror = function() {
+                                error('Network error');
+                            };
+                            
+                            xhr.upload.onprogress = function(e) {
+                                if (e.lengthComputable) {
+                                    progress(e.loaded, e.total);
+                                }
+                            };
+                            
+                            xhr.send(formData);
+                            
+                            return {
+                                abort: () => {
+                                    xhr.abort();
+                                    abort();
+                                }
+                            };
+                        },
+                        revert: null,
+                        restore: null,
+                        load: null
+                    }
+                });
+                
+                // Track when files are removed to clean up URLs
+                editorFilePond.on('removefile', (error, file) => {
+                    if (!error && file && file.serverId) {
+                        // Remove URL from array if file is removed
+                        // Note: FilePond doesn't directly give us the URL, so we'll track it differently
+                        // We'll handle cleanup on modal close instead
+                    }
+                });
+            }
+        }
+    });
+    
+    // Reset uploaded image URLs when modal is hidden
+    customImageModal.addEventListener('hidden.bs.modal', function() {
+        uploadedImageUrls = [];
+        if (editorFilePond) {
+            editorFilePond.removeFiles();
+        }
+    });
+    
+    // Set up button handlers after modal is created
+    setTimeout(() => {
+        // Load images when browse tab is shown
+        const browseTab = document.getElementById('browse-tab');
+        if (browseTab) {
+            browseTab.addEventListener('shown.bs.tab', function() {
+                // Load images when browse tab becomes active
+                loadEditorImages(function(url, filename) {
+                    insertImageIntoEditor(url, filename);
+                });
+            });
+        }
+        
+        // Insert image button
+        const insertImageBtn = document.getElementById('insert-image-btn');
+        if (insertImageBtn) {
+            insertImageBtn.addEventListener('click', function() {
+            let imageUrl = null;
+            let altText = '';
+            
+            // Get active tab
+            const activeTab = document.querySelector('#imageInsertTabs .nav-link.active');
+            const activeTabId = activeTab ? activeTab.id : '';
+            
+            if (activeTabId === 'upload-tab') {
+                // Upload tab - handle multiple files
+                if (uploadedImageUrls.length > 0) {
+                    altText = document.getElementById('uploaded-image-alt').value.trim();
+                    
+                    // Insert all uploaded images sequentially
+                    if (editor) {
+                        editor.model.change(writer => {
+                            let insertPosition = editor.model.document.selection.getFirstPosition();
+                            
+                            uploadedImageUrls.forEach((url) => {
+                                const imageElement = writer.createElement('imageBlock', {
+                                    src: url,
+                                    alt: altText || ''
+                                });
+                                editor.model.insertContent(imageElement, insertPosition);
+                                // Move position to after the inserted image for next insertion
+                                insertPosition = writer.createPositionAfter(imageElement);
+                            });
+                        });
+                    }
+                    
+                    // Close modal
+                    customImageModalInstance.hide();
+                    return;
+                } else {
+                    alert('Please upload at least one image.');
+                    return;
+                }
+            } else if (activeTabId === 'browse-tab') {
+                // Browse tab
+                imageUrl = selectedImageUrl;
+                altText = document.getElementById('browsed-image-alt').value.trim();
+            } else if (activeTabId === 'url-tab') {
+                // URL tab
+                imageUrl = document.getElementById('image-url-input').value.trim();
+                altText = document.getElementById('url-image-alt').value.trim();
+            }
+            
+            if (imageUrl) {
+                // Insert image into editor
+                if (editor) {
+                    editor.model.change(writer => {
+                        const imageElement = writer.createElement('imageBlock', {
+                            src: imageUrl,
+                            alt: altText || ''
+                        });
+                        
+                        const insertPosition = editor.model.document.selection.getFirstPosition();
+                        editor.model.insertContent(imageElement, insertPosition);
+                    });
+                }
+                
+                // Close modal
+                customImageModalInstance.hide();
+            } else {
+                alert('Please select or upload an image, or provide a URL.');
+            }
+            });
+        }
+    }, 100);
+    
+    // Function to insert image into editor (used by browser)
+    function insertImageIntoEditor(url, filename) {
+        if (!editor) {
+            console.error('Editor not initialized');
+            return;
+        }
+        
+        // Set selected image URL for browse tab
+        selectedImageUrl = url;
+    }
+    
+    // Function to load images for editor picker
+    function loadEditorImages(callback) {
+        const loadingEl = document.getElementById('editor-image-picker-loading');
+        const gridEl = document.getElementById('editor-image-picker-grid');
+        const emptyEl = document.getElementById('editor-image-picker-empty');
+        
+        if (!loadingEl || !gridEl || !emptyEl) {
+            console.error('Image picker elements not found');
+            return;
+        }
+        
+        loadingEl.classList.remove('d-none');
+        loadingEl.classList.add('d-block');
+        gridEl.classList.add('d-none');
+        emptyEl.classList.add('d-none');
+        emptyEl.classList.remove('d-block');
+        gridEl.innerHTML = '';
+        
+        const url = '/api/list-images?content_type=gallery&content_id=' + (contentId || '') + '&target_attribute=image';
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                loadingEl.classList.add('d-none');
+                loadingEl.classList.remove('d-block');
+                
+                if (data.success && data.images && data.images.length > 0) {
+                    gridEl.classList.remove('d-none');
+                    
+                    data.images.forEach(function(image) {
+                        const col = document.createElement('div');
+                        // Multi-column layout: 6 cols on xl, 5 on lg, 4 on md, 3 on sm, 2 on xs
+                        col.className = 'col-xl-2 col-lg-2 col-md-3 col-sm-4 col-6';
+                        
+                        const card = document.createElement('div');
+                        card.className = 'card h-100';
+                        card.style.cursor = 'pointer';
+                        card.style.transition = 'transform 0.2s, box-shadow 0.2s';
+                        card.addEventListener('mouseenter', function() {
+                            this.style.transform = 'translateY(-2px)';
+                            this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                        });
+                        card.addEventListener('mouseleave', function() {
+                            this.style.transform = 'translateY(0)';
+                            this.style.boxShadow = '';
+                        });
+                        card.addEventListener('click', function() {
+                            if (callback) {
+                                callback(image.url, image.filename);
+                            }
+                        });
+                        
+                        const img = document.createElement('img');
+                        img.src = image.thumbnail_url;
+                        img.className = 'card-img-top';
+                        img.style.objectFit = 'cover';
+                        img.style.height = '120px';
+                        img.style.width = '100%';
+                        img.alt = image.filename;
+                        
+                        const cardBody = document.createElement('div');
+                        cardBody.className = 'card-body p-2';
+                        
+                        const filename = document.createElement('small');
+                        filename.className = 'text-muted text-truncate d-block';
+                        filename.textContent = image.filename;
+                        filename.title = image.filename;
+                        filename.style.fontSize = '0.75rem';
+                        
+                        cardBody.appendChild(filename);
+                        card.appendChild(img);
+                        card.appendChild(cardBody);
+                        col.appendChild(card);
+                        gridEl.appendChild(col);
+                    });
+                } else {
+                    emptyEl.classList.remove('d-none');
+                    emptyEl.classList.add('d-block');
+                }
+            })
+            .catch(error => {
+                loadingEl.classList.add('d-none');
+                loadingEl.classList.remove('d-block');
+                console.error('Error loading images:', error);
+                alert('An error occurred while loading the images.');
+            });
+    }
+    
+    const form = document.getElementById('content-form');
+    form.addEventListener('submit', function(e) {
+        if (!editor) {
+            console.error('Editor not initialized');
+            e.preventDefault();
+            return false;
+        }
+        
+        // Get markdown content directly from CKEditor
+        // The Markdown plugin automatically outputs markdown format
+        const markdownContent = editor.getData();
+        
+        const contentField = document.getElementById('content');
+        if (!contentField) {
+            console.error('Content field not found');
+            e.preventDefault();
+            return false;
+        }
+        
+        contentField.value = markdownContent;
+        console.log('Setting content field value, length:', markdownContent.length);
+    });
+    
+});
+</script>
+{% include "_edit_generate_stub.html" %}
+{% endblock %}
+

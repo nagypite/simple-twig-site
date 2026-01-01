@@ -1,0 +1,40 @@
+{% extends "page.html" %}
+
+{% block title %}Sign in - {{sitename}}{% endblock %}
+
+{% block content %}
+<h1>Sign in</h1>
+
+    <div class="p-3">
+      <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-4">
+            {% if login_error %}
+            <div class="alert alert-danger" role="alert">
+              {{ login_error }}
+            </div>
+            {% endif %}
+
+            {% if is_authenticated %}
+            <div class="alert alert-info" role="alert">
+              You are already signed in as: <strong>{{ user.name }}</strong> ({{ user.email }})
+              <br>
+              <a href="/logout" class="btn btn-sm btn-outline-secondary mt-2">Sign out</a>
+            </div>
+            {% else %}
+            <form method="POST" action="/login">
+              <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" name="username" required autofocus>
+              </div>
+              <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+              </div>
+              <button type="submit" class="btn btn-primary w-100">Sign in</button>
+            </form>
+            {% endif %}
+        </div>
+      </div>
+    </div>
+{% endblock %}
+

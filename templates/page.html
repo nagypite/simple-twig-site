@@ -1,0 +1,24 @@
+{% extends "default.html" %}
+
+{% block menu %}
+<div class="d-flex flex-wrap w-100">
+  {% include "_menu.html" %}
+  {% if secondary_menu %}
+  <div class="w-100"></div>
+  {% include "_menu.html" with {'menu': secondary_menu, 'class':'menu-secondary'} %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block body_class %}bg-body-secondary{% endblock %}
+{% block main %}
+<main class="page container">
+    {% if message %}
+    <div class="alert alert-warning" role="alert">
+    {{ message }}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</main>
+{% endblock %}
