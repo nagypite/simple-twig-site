@@ -17,9 +17,9 @@ function _parse_yaml_frontmatter($yaml) {
       $key = trim($matches[1]);
       $value = empty($matches[2]) ? '' : trim($matches[2]);
       
-      // Remove quotes if present
+      // Remove quotes if present (undo addslashes from _generate_yaml_frontmatter)
       if (!empty($value) && (($value[0] === '"' && $value[-1] === '"') || ($value[0] === "'" && $value[-1] === "'"))) {
-        $value = substr($value, 1, -1);
+        $value = stripslashes(substr($value, 1, -1));
       }
 
       if ($key === 'keywords') {

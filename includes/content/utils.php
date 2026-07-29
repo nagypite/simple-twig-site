@@ -1,88 +1,121 @@
 <?php
 
 /**
- * Generate a markdown-safe abstract by stripping markdown syntax and truncating at word boundaries
+ * Strip markdown to plain text for abstracts and similar summaries.
+ * @param string $markdown
+ * @param int|null $maxLength Optional max length; truncates at word boundary with ellipsis
+ * @return string
+ */
+function _markdown_to_plain_text($markdown, $maxLength = null) {
+  if ($markdown === null || $markdown === '') {
+    return '';
+  }
+
+  $plain_text = $markdown;
+
+  // Remove code blocks and inline code
+  $plain_text = preg_replace('/```[\s\S]*?```/', '', $plain_text);
+  $plain_text = preg_replace('/`[^`]*`/', '', $plain_text);
+
+  // Remove images
+  $plain_text = preg_replace('/!\[([^\]]*)\]\([^\)]*\)/', '', $plain_text);
+  $plain_text = preg_replace('/!\[([^\]]*)\]\[[^\]]*\]/', '', $plain_text);
+
+  // Links — keep link text only
+  $plain_text = preg_replace('/\[([^\]]+)\]\([^\)]*\)/', '$1', $plain_text);
+  $plain_text = preg_replace('/\[([^\]]+)\]\[[^\]]*\]/', '$1', $plain_text);
+
+  // Reference definitions and footnotes
+  $plain_text = preg_replace('/^\s*\[[^\]]+\]:\s*.*$/m', '', $plain_text);
+  $plain_text = preg_replace('/\[\^[^\]]+\]/', '', $plain_text);
+  $plain_text = preg_replace('/^\s*\[\^[^\]]+\]:\s*.*$/m', '', $plain_text);
+
+  // Headers, rules, blockquotes, lists
+  $plain_text = preg_replace('/^#{1,6}\s+(.+)$/m', '$1', $plain_text);
+  $plain_text = preg_replace('/^[-*_]{3,}\s*$/m', '', $plain_text);
+  $plain_text = preg_replace('/^>\s+(.+)$/m', '$1', $plain_text);
+  $plain_text = preg_replace('/^[\s]*[-*+]\s+(.+)$/m', '$1', $plain_text);
+  $plain_text = preg_replace('/^[\s]*\d+\.\s+(.+)$/m', '$1', $plain_text);
+
+  // Emphasis and strikethrough
+  $plain_text = preg_replace('/\*\*([^*]+)\*\*/', '$1', $plain_text);
+  $plain_text = preg_replace('/\*([^*]+)\*/', '$1', $plain_text);
+  $plain_text = preg_replace('/__([^_]+)__/', '$1', $plain_text);
+  $plain_text = preg_replace('/_([^_]+)_/', '$1', $plain_text);
+  $plain_text = preg_replace('/~~([^~]+)~~/', '$1', $plain_text);
+
+  // Autolinks and HTML
+  $plain_text = preg_replace('/<((?:https?|ftp):\/\/[^>]+)>/i', '$1', $plain_text);
+  $plain_text = strip_tags($plain_text);
+
+  // Markdown escape backslashes before punctuation
+  $plain_text = preg_replace('~\\\\([\\[\\]`_*()#+.!\\-{}])~u', '$1', $plain_text);
+
+  // Bilingual marker belongs in full content only, not summaries
+  $plain_text = preg_replace('/^(?:\\\\)*\[HU\/CN\]\s*/u', '', $plain_text);
+
+  $plain_text = preg_replace('/\s+/u', ' ', $plain_text);
+  $plain_text = trim($plain_text);
+
+  if ($maxLength === null || $maxLength <= 0 || mb_strlen($plain_text) <= $maxLength) {
+    return _plain_text_trim_abstract_tail($plain_text);
+  }
+
+  $slice = mb_substr($plain_text, 0, $maxLength);
+  $last_space = mb_strrpos($slice, ' ');
+  if ($last_space !== false) {
+    $truncated = mb_substr($slice, 0, $last_space);
+  } else {
+    $truncated = $slice;
+  }
+
+  $truncated = _plain_text_trim_abstract_tail($truncated);
+  if ($truncated === '') {
+    return '';
+  }
+
+  if (preg_match('/[.!?…][\'"»›」』】)]*$/u', $truncated)) {
+    return $truncated;
+  }
+
+  return $truncated . '...';
+}
+
+/**
+ * Trim trailing whitespace and punctuation unsuitable for abstract endings.
+ * Sentence closers (. ! ? …) may remain; commas, hyphens, and similar are removed.
+ */
+function _plain_text_trim_abstract_tail(string $text): string {
+  $text = trim($text);
+  if ($text === '') {
+    return '';
+  }
+
+  $strip = ',;:/\\-–—·•|';
+  while ($text !== '') {
+    $last = mb_substr($text, -1);
+    if (preg_match('/\s/u', $last)) {
+      $text = trim($text);
+      continue;
+    }
+    if (mb_strpos($strip, $last) !== false) {
+      $text = trim(mb_substr($text, 0, -1));
+      continue;
+    }
+    break;
+  }
+
+  return trim($text);
+}
+
+/**
+ * Generate a plain-text abstract from markdown body content.
  * @param string $markdown The markdown content to generate abstract from
  * @param int $length Maximum length of the abstract
  * @return string Plain text abstract, truncated at word boundaries with ellipsis if needed
  */
 function _generate_markdown_safe_abstract($markdown, $length) {
-  if (empty($markdown)) {
-    return '';
-  }
-  
-  if ($length <= 0) {
-    return '';
-  }
-  
-  // Strip markdown syntax to get plain text
-  $plain_text = $markdown;
-  
-  // Remove code blocks (```code``` or ```code```)
-  $plain_text = preg_replace('/```[\s\S]*?```/', '', $plain_text);
-  
-  // Remove inline code (`code`)
-  $plain_text = preg_replace('/`[^`]*`/', '', $plain_text);
-  
-  // Remove images ![alt](url) or ![alt][ref]
-  $plain_text = preg_replace('/!\[([^\]]*)\]\([^\)]*\)/', '', $plain_text);
-  $plain_text = preg_replace('/!\[([^\]]*)\]\[[^\]]*\]/', '', $plain_text);
-  
-  // Remove links [text](url) or [text][ref] - keep the text part
-  $plain_text = preg_replace('/\[([^\]]+)\]\([^\)]*\)/', '$1', $plain_text);
-  $plain_text = preg_replace('/\[([^\]]+)\]\[[^\]]*\]/', '$1', $plain_text);
-  
-  // Remove reference-style links [text]: url (standalone lines)
-  $plain_text = preg_replace('/^\s*\[[^\]]+\]:\s*.*$/m', '', $plain_text);
-  
-  // Remove headers (# Header or ## Header, etc.)
-  $plain_text = preg_replace('/^#{1,6}\s+(.+)$/m', '$1', $plain_text);
-  
-  // Remove horizontal rules (---, ***, ___)
-  $plain_text = preg_replace('/^[-*_]{3,}\s*$/m', '', $plain_text);
-  
-  // Remove blockquotes (> quote)
-  $plain_text = preg_replace('/^>\s+(.+)$/m', '$1', $plain_text);
-  
-  // Remove list markers (-, *, +, 1., etc.)
-  $plain_text = preg_replace('/^[\s]*[-*+]\s+(.+)$/m', '$1', $plain_text);
-  $plain_text = preg_replace('/^[\s]*\d+\.\s+(.+)$/m', '$1', $plain_text);
-  
-  // Remove bold/italic formatting (**text**, *text*, __text__, _text_)
-  $plain_text = preg_replace('/\*\*([^*]+)\*\*/', '$1', $plain_text);
-  $plain_text = preg_replace('/\*([^*]+)\*/', '$1', $plain_text);
-  $plain_text = preg_replace('/__([^_]+)__/', '$1', $plain_text);
-  $plain_text = preg_replace('/_([^_]+)_/', '$1', $plain_text);
-  
-  // Remove strikethrough (~~text~~)
-  $plain_text = preg_replace('/~~([^~]+)~~/', '$1', $plain_text);
-  
-  // Remove HTML tags if any
-  $plain_text = strip_tags($plain_text);
-  
-  // Normalize whitespace - replace multiple spaces/newlines with single space
-  $plain_text = preg_replace('/\s+/', ' ', $plain_text);
-  
-  // Trim whitespace
-  $plain_text = trim($plain_text);
-  
-  // If content is shorter than or equal to target length, return as is
-  if (mb_strlen($plain_text) <= $length) {
-    return $plain_text;
-  }
-  
-  // Truncate at word boundary
-  $truncated = mb_substr($plain_text, 0, $length);
-  
-  // Find last space before the limit to break at word boundary
-  $last_space = mb_strrpos($truncated, ' ');
-  if ($last_space !== false && $last_space > $length * 0.5) {
-    // Only break at word boundary if it's not too early (at least 50% of target length)
-    $truncated = mb_substr($truncated, 0, $last_space);
-  }
-  
-  // Add ellipsis
-  return trim($truncated) . '...';
+  return _markdown_to_plain_text($markdown, $length);
 }
 
 /**
@@ -141,4 +174,130 @@ function _content_resolve_menu_item($type) {
     }
   }
   return false;
+}
+
+/**
+ * Resolve the share/preview image URL for a content item.
+ * @param array $content
+ * @return string|null Relative or absolute image URL
+ */
+function _content_resolve_share_image_url($content) {
+  if (!empty($content['image_url'])) {
+    return $content['image_url'];
+  }
+
+  if (!empty($content['gallery'])) {
+    $gallery = is_string($content['gallery'])
+      ? json_decode($content['gallery'], true)
+      : $content['gallery'];
+    if (!empty($gallery[0]['url'])) {
+      return $gallery[0]['url'];
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolve a local filesystem path for a share image URL.
+ * @param string $image_url
+ * @return string|null
+ */
+function _content_share_image_local_path($image_url) {
+  if ($image_url === '') {
+    return null;
+  }
+
+  if (preg_match('#^https?://#i', $image_url)) {
+    $site_host = parse_url($GLOBALS['config']['siteurl'] ?? '', PHP_URL_HOST);
+    $image_host = parse_url($image_url, PHP_URL_HOST);
+    if (empty($site_host) || empty($image_host) || strcasecmp($site_host, $image_host) !== 0) {
+      return null;
+    }
+    $path = parse_url($image_url, PHP_URL_PATH);
+    $image_url = $path ?: '';
+  }
+
+  if ($image_url === '') {
+    return null;
+  }
+
+  $relative = (strpos($image_url, '/') === 0 ? '' : '/') . $image_url;
+  if (strpos($relative, '/assets/') === 0) {
+    $public_path = BASE_PATH . '/public' . $relative;
+    if (is_readable($public_path)) {
+      return $public_path;
+    }
+  }
+
+  return BASE_PATH . $relative;
+}
+
+/**
+ * Build page meta (description + Open Graph / Twitter) for a content item.
+ * @param array $content
+ * @param string $page_url Canonical absolute page URL
+ * @return array
+ */
+function _content_build_page_meta($content, $page_url) {
+  $site_meta = $GLOBALS['config']['meta'];
+  $sitename = $GLOBALS['config']['sitename'];
+  $siteurl = rtrim($GLOBALS['config']['siteurl'], '/');
+
+  $title = trim($content['title'] ?? '');
+  if ($title === '') {
+    $title = $sitename;
+  }
+  $page_title = ($title === $sitename) ? $title : $title . ' - ' . $sitename;
+
+  $description = '';
+  if (!empty($content['abstract'])) {
+    $description = $content['abstract'];
+  } elseif (!empty($content['subtitle'])) {
+    $description = $content['subtitle'];
+  }
+  $description = html_entity_decode(strip_tags($description), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+  $description = preg_replace('/\s+/u', ' ', trim($description));
+  if (mb_strlen($description) > 300) {
+    $description = mb_substr($description, 0, 297) . '...';
+  }
+  if ($description === '') {
+    $description = $site_meta['description'] ?? '';
+  }
+
+  $author = $content['author']['title'] ?? ($site_meta['author'] ?? 'simple-twig-site');
+
+  $meta = [
+    'title' => $page_title,
+    'description' => $description,
+    'author' => $author,
+    'canonical' => $page_url,
+    'og' => [
+      'type' => 'article',
+      'title' => $page_title,
+      'description' => $description,
+      'url' => $page_url,
+      'site_name' => $sitename,
+      'locale' => 'hu_HU',
+    ],
+    'twitter' => [
+      'card' => 'summary',
+      'title' => $page_title,
+      'description' => $description,
+    ],
+  ];
+
+  if (!empty($content['date'])) {
+    $timestamp = strtotime($content['date']);
+    if ($timestamp !== false) {
+      $meta['og']['published_time'] = date('c', $timestamp);
+    }
+  }
+
+  $image_url = _content_resolve_share_image_url($content);
+  if ($image_url !== null) {
+    _meta_enrich_with_image($meta, $image_url, $title);
+  }
+
+  return $meta;
 }

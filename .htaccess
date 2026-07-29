@@ -13,7 +13,8 @@
     RewriteCond %{REQUEST_URI}::$1 ^(/.+)/(.*)::\2$
     RewriteRule ^(.*) - [E=BASE:%1]
 
-    RewriteCond %{REQUEST_URI} !^public
+    RewriteCond %{REQUEST_URI} !^/public
+    RewriteCond %{REQUEST_URI} !^/kapu
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 

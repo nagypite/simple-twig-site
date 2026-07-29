@@ -48,7 +48,7 @@ function serve($path, $variables = [], $status = 200) {
     // Create path_data for login page
     $path_data = [
       'path' => 'login',
-      'template' => 'login.html',
+      'template' => 'login/content.html',
       'menu_item' => [
         'path' => 'login',
         'generic' => true,
@@ -77,6 +77,39 @@ function serve($path, $variables = [], $status = 200) {
     'request' => $_REQUEST,
     'method' => $_SERVER['REQUEST_METHOD'],
   ], $variables);
+
+  // Handle generalized contact forms (e.g. membership application) — load mail/contact only when request path is a contact form
+  $contact_form_paths = array_column($GLOBALS['config']['contact_forms'] ?? [], 'path');
+  $request_path = trim($path_data['original_path'] ?? $path_data['path'], '/');
+  if (in_array($request_path, $contact_form_paths, true)) {
+    require_once BASE_PATH . '/includes/mail.php';
+    require_once BASE_PATH . '/includes/contact.php';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+      $contact_form_type = get_contact_form_type_for_path($request_path);
+      if ($contact_form_type !== null) {
+        $result = handle_contact_form($contact_form_type, $_POST);
+
+        if (!empty($result['data'])) {
+          $variables['contact_form_data'] = $result['data'];
+        }
+        if (!empty($result['errors'])) {
+          $variables['contact_form_errors'] = $result['errors'];
+        }
+
+        if ($result['success'] && !empty($result['redirect_path'])) {
+          $redirectUrl = '/' . ltrim($result['redirect_path'], '/');
+          header('Location: ' . $redirectUrl);
+          exit;
+        }
+      }
+    } else {
+      $contact_form_type = get_contact_form_type_for_path($request_path);
+      if ($contact_form_type !== null && session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['contact_form_start'][$contact_form_type] = time();
+      }
+    }
+  }
 
   // Check authentication for protected routes
   if (!empty($path_data['menu_item'])) {
@@ -126,57 +159,21 @@ function serve($path, $variables = [], $status = 200) {
     // If show_for is set, enforce access control
     if (!empty($show_for_roles)) {
       $user = current_user();
-      $is_authenticated = !empty($user);
-      $user_roles = $user['roles'] ?? [];
-      
-      $has_access = false;
-      
-      foreach ($show_for_roles as $required_condition) {
-        // Handle special token: _guest (allow only when NOT authenticated)
-        if ($required_condition === '_guest') {
-          if (!$is_authenticated) {
-            $has_access = true;
+      if (empty($user)) {
+        // User not authenticated - redirect to login
+        require_auth($show_for_roles);
+      } else {
+        // User authenticated - check if they have required role
+        $user_roles = $user['roles'] ?? [];
+        $has_required_role = false;
+        foreach ($show_for_roles as $required_role) {
+          if (in_array($required_role, $user_roles)) {
+            $has_required_role = true;
             break;
           }
         }
-        // Handle special token: _user (allow only when authenticated)
-        elseif ($required_condition === '_user') {
-          if ($is_authenticated) {
-            $has_access = true;
-            break;
-          }
-        }
-        // Handle regular role: allow if user has this role
-        elseif ($is_authenticated && in_array($required_condition, $user_roles)) {
-          $has_access = true;
-          break;
-        }
-      }
-      
-      if (!$has_access) {
-        if (!$is_authenticated) {
-          // User is not authenticated - check if any condition requires authentication
-          // (i.e., _user or regular roles, not _guest)
-          $requires_auth = false;
-          foreach ($show_for_roles as $required_condition) {
-            if ($required_condition !== '_guest') {
-              $requires_auth = true;
-              break;
-            }
-          }
-          if ($requires_auth) {
-            // Redirect to login for _user or regular roles
-            require_auth($show_for_roles);
-          } else {
-            // Only _guest was required - this shouldn't happen (has_access should be true)
-            // but handle edge case anyway
-            http_response_code(403);
-            die('Access denied.');
-          }
-        } else {
-          // User is authenticated but doesn't meet requirements
-          // This happens when: _guest is required (user shouldn't be authenticated)
-          // or user doesn't have required role
+        if (!$has_required_role) {
+          // User doesn't have required role - deny access
           http_response_code(403);
           die('Access denied. You do not have permission to access this page.');
         }
@@ -350,7 +347,6 @@ function serve($path, $variables = [], $status = 200) {
   }
 
   if (isset($path_data['error'])) {
-    log_debug('serve', 'error', $path_data['error'], $path);
     if ($path == $GLOBALS['config']['error_path']) {
       die('Cannot serve error_path.');
     }
@@ -375,6 +371,8 @@ function serve($path, $variables = [], $status = 200) {
     return serve($redirect_path, $variables, 404);
   }
 
+  _serve_apply_template_meta($path_data, $variables);
+
   log_debug('serve', $path, $path_data['template']);
 
   $variables['menu'] = build_menu($path_data);
@@ -387,6 +385,7 @@ function serve($path, $variables = [], $status = 200) {
   // Add permission variables for templates
   $variables['is_admin'] = has_role('admin');
   $variables['can_edit_article'] = has_any_role(['admin', 'article']);
+  $variables['can_edit_feature'] = has_any_role(['admin', 'feature']);
   $variables['can_edit_event'] = has_any_role(['admin', 'event']);
   $variables['can_edit_gallery'] = has_any_role(['admin', 'gallery']);
   $variables['can_edit_newsletter'] = has_any_role(['admin', 'newsletter']);

@@ -22,6 +22,38 @@ require_once BASE_PATH.'/vendor/autoload.php';
 
 include BASE_PATH.'/config/base.php';
 
+// Load environment variables from .env if available (for SMTP and other secrets)
+if (class_exists('\\Dotenv\\Dotenv')) {
+    $dotenv = \Dotenv\Dotenv::createImmutable(BASE_PATH);
+    $dotenv->safeLoad();
+}
+
+// Configure SMTP settings from environment variables (used by mail helper)
+$config['smtp'] = [
+    'host' => $_ENV['SMTP_HOST'] ?? $_SERVER['SMTP_HOST'] ?? null,
+    'port' => isset($_ENV['SMTP_PORT']) ? (int)$_ENV['SMTP_PORT'] : (isset($_SERVER['SMTP_PORT']) ? (int)$_SERVER['SMTP_PORT'] : 587),
+    'username' => $_ENV['SMTP_USER'] ?? $_SERVER['SMTP_USER'] ?? null,
+    'password' => $_ENV['SMTP_PASS'] ?? $_SERVER['SMTP_PASS'] ?? null,
+    'encryption' => $_ENV['SMTP_ENCRYPTION'] ?? $_SERVER['SMTP_ENCRYPTION'] ?? 'tls',
+    'auth_type' => $_ENV['SMTP_AUTH_TYPE'] ?? $_SERVER['SMTP_AUTH_TYPE'] ?? null,
+    'from_address' => $_ENV['SMTP_FROM_ADDRESS'] ?? $_SERVER['SMTP_FROM_ADDRESS'] ?? null,
+    'from_name' => $_ENV['SMTP_FROM_NAME'] ?? $_SERVER['SMTP_FROM_NAME'] ?? ($config['sitename'] ?? 'simple-twig-site'),
+];
+
+// Email debug: when true, contact forms do not send mail but still write logs. Default on when SMTP is not configured; set EMAIL_DEBUG=0 to send for real.
+$smtpConfigured = !empty($config['smtp']['host']) && !empty($config['smtp']['username']) && isset($config['smtp']['password']);
+$config['email_debug'] = !$smtpConfigured || (($_ENV['EMAIL_DEBUG'] ?? $_SERVER['EMAIL_DEBUG'] ?? '1') !== '0');
+
+// Email verbosity: captures SMTP server responses into logs.
+// - Default: verbose only when we are actually trying to send mail (EMAIL_DEBUG=0 and SMTP configured)
+// - Override: set EMAIL_VERBOSE=1 or EMAIL_VERBOSE=0
+$emailVerboseEnv = $_ENV['EMAIL_VERBOSE'] ?? $_SERVER['EMAIL_VERBOSE'] ?? null;
+if ($emailVerboseEnv === null || $emailVerboseEnv === '') {
+  $config['email_verbose'] = !$config['email_debug'];
+} else {
+  $config['email_verbose'] = (string)$emailVerboseEnv !== '0';
+}
+
 $loader = new \Twig\Loader\FilesystemLoader([TEMPLATE_PATH, PAGES_PATH]);
 $twig = new \Twig\Environment($loader, [
   'cache' => CACHE_PATH,
@@ -85,7 +117,7 @@ class MichelfMarkdownAdapter implements MarkdownInterface {
         $fileMtime = filemtime($filePath);
         // Use cached config hash instead of recalculating
         // Include processing version to invalidate cache when processing logic changes
-        $processingVersion = '1.1'; // Increment when processing logic changes
+        $processingVersion = '1.2'; // Increment when processing logic changes
         // Include skipPostProcess in cache key to differentiate between raw and processed versions
         $cacheKey = md5($filePath . ':' . $contentType . ':' . $fileMtime . ':' . $this->configHash . ':' . $processingVersion . ':' . ($skipPostProcess ? 'raw' : 'processed'));
         $cacheFile = $this->cacheDir . '/' . $cacheKey . '.html';
@@ -101,7 +133,7 @@ class MichelfMarkdownAdapter implements MarkdownInterface {
         $fileMtime = filemtime($filePath);
         // Use cached config hash instead of recalculating
         // Include processing version to invalidate cache when processing logic changes
-        $processingVersion = '1.1'; // Increment when processing logic changes
+        $processingVersion = '1.2'; // Increment when processing logic changes
         // Include skipPostProcess in cache key to differentiate between raw and processed versions
         $cacheKey = md5($filePath . ':' . $contentType . ':' . $fileMtime . ':' . $this->configHash . ':' . $processingVersion . ':' . ($skipPostProcess ? 'raw' : 'processed'));
         $cacheFile = $this->cacheDir . '/' . $cacheKey . '.html';
@@ -259,6 +291,8 @@ class MichelfMarkdownAdapter implements MarkdownInterface {
             }
         }
         
+        $this->postProcessHuCnAnchor($dom);
+        
         // Get the processed HTML
         $body = $dom->getElementsByTagName('body')->item(0);
         if ($body) {
@@ -271,6 +305,121 @@ class MichelfMarkdownAdapter implements MarkdownInterface {
         }
         
         return $html;
+    }
+    
+    /**
+     * Whether $target appears after $reference in document order.
+     * DOMText lacks compareDocumentPosition() in some PHP builds, so we use an element ancestor or tree walk.
+     */
+    private function domNodeIsBefore(?\DOMNode $reference, ?\DOMNode $target): bool {
+        if (!$reference || !$target) {
+            return false;
+        }
+
+        $ref = $reference;
+        while ($ref && !($ref instanceof \DOMElement)) {
+            $ref = $ref->parentNode;
+        }
+        if ($ref && method_exists($ref, 'compareDocumentPosition')) {
+            return (bool) ($ref->compareDocumentPosition($target) & \DOMNode::DOCUMENT_POSITION_FOLLOWING);
+        }
+
+        for ($node = $this->domNextNodeInDocumentOrder($reference); $node; $node = $this->domNextNodeInDocumentOrder($node)) {
+            if ($node->isSameNode($target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function domNextNodeInDocumentOrder(\DOMNode $node): ?\DOMNode {
+        if ($node->firstChild) {
+            return $node->firstChild;
+        }
+        while ($node) {
+            if ($node->nextSibling) {
+                return $node->nextSibling;
+            }
+            $node = $node->parentNode;
+        }
+        return null;
+    }
+
+    /**
+     * When content starts with [HU/CN] and has an <hr> below, link "CN" to the Chinese section.
+     * Anchor id uses pinyin: neirong (内容).
+     */
+    private function postProcessHuCnAnchor(\DOMDocument $dom): void {
+        $marker = '[HU/CN]';
+        $anchorId = 'neirong';
+        
+        $root = $dom->getElementsByTagName('body')->item(0) ?? $dom->documentElement;
+        if (!$root) {
+            return;
+        }
+        
+        $leadingText = preg_replace('/^\s+/u', '', $root->textContent ?? '');
+        if (!str_starts_with($leadingText, $marker)) {
+            return;
+        }
+        
+        $markerTextNode = null;
+        $markerOffset = null;
+        $xpath = new \DOMXPath($dom);
+        foreach ($xpath->query('.//text()') as $textNode) {
+            $text = $textNode->nodeValue;
+            $trimmed = ltrim($text, " \t\n\r\0\x0B\xC2\xA0");
+            if ($trimmed === '') {
+                continue;
+            }
+            $pos = strpos($text, $marker);
+            if ($pos !== false && str_starts_with($trimmed, $marker)) {
+                $markerTextNode = $textNode;
+                $markerOffset = $pos;
+            }
+            break;
+        }
+        
+        if ($markerTextNode === null) {
+            return;
+        }
+        
+        $hr = null;
+        foreach ($dom->getElementsByTagName('hr') as $candidate) {
+            if ($this->domNodeIsBefore($markerTextNode, $candidate)) {
+                $hr = $candidate;
+                break;
+            }
+        }
+        if ($hr === null) {
+            return;
+        }
+        
+        if (!$hr->hasAttribute('id')) {
+            $hr->setAttribute('id', $anchorId);
+        } else {
+            $anchorId = $hr->getAttribute('id');
+        }
+        
+        $text = $markerTextNode->nodeValue;
+        $before = substr($text, 0, $markerOffset);
+        $after = substr($text, $markerOffset + strlen($marker));
+        $parent = $markerTextNode->parentNode;
+        
+        $fragment = $dom->createDocumentFragment();
+        if ($before !== '') {
+            $fragment->appendChild($dom->createTextNode($before));
+        }
+        $fragment->appendChild($dom->createTextNode('[HU/'));
+        $link = $dom->createElement('a', 'CN');
+        $link->setAttribute('href', '#' . $anchorId);
+        $fragment->appendChild($link);
+        $fragment->appendChild($dom->createTextNode(']'));
+        if ($after !== '') {
+            $fragment->appendChild($dom->createTextNode($after));
+        }
+        $parent->replaceChild($fragment, $markerTextNode);
     }
 }
 
@@ -287,7 +436,7 @@ $twig->addRuntimeLoader(new class implements RuntimeLoaderInterface {
 $twig->addExtension(new \Twig\Extra\Markdown\MarkdownExtension());
 
 // Custom markdown filter that can access file path (for backward compatibility)
-// Note: Pre-processed content should use content_html, abstract_html fields instead
+// Note: Pre-processed content should use content_html; abstracts are plain text in content.abstract
 $twig->addFilter(new \Twig\TwigFilter('markdown_to_html', function ($content, $filePath = null) {
     // If file path not provided, try to get from global context (set by serve.php)
     if (empty($filePath) && isset($GLOBALS['twig_markdown_file_path'])) {
@@ -316,6 +465,15 @@ $twig->addFilter(new \Twig\TwigFilter('markdown_to_html_raw', function ($content
     }
     return $adapter->convert($content ?? '', $filePath, 'content', true);
 }, ['is_safe' => ['html']]));
+
+// Cache-bust public assets with a short content hash (updates when compile-scss regenerates CSS)
+$twig->addFunction(new \Twig\TwigFunction('asset', function (string $path): string {
+    $publicPath = BASE_PATH . '/public' . $path;
+    if (!is_file($publicPath)) {
+        return $path;
+    }
+    return $path . '?v=' . substr(md5_file($publicPath), 0, 8);
+}));
 
 // Template function to get post by stub
 $twig->addFunction(new \Twig\TwigFunction('get_post_by_stub', function ($stub) {

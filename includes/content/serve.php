@@ -2,6 +2,7 @@
 
 // Ensure required modules are loaded
 require_once __DIR__ . '/core.php';
+require_once __DIR__ . '/utils.php';
 require_once __DIR__ . '/processor.php';
 require_once __DIR__ . '/filter.php';
 require_once __DIR__ . '/handlers.php';
@@ -40,6 +41,8 @@ function content_serve_preprocess(&$path_data, &$variables) {
       _content_process_siblings($content);
 
       $variables['content'] = $content;
+      $page_url = rtrim($GLOBALS['config']['siteurl'], '/') . $content['url'];
+      $variables['meta'] = _content_build_page_meta($content, $page_url);
       return true;
     }
     else {
@@ -54,6 +57,12 @@ function content_serve_preprocess(&$path_data, &$variables) {
   // apply filtering if needed
   if (!empty($variables['request']['filter'])) {
     $content_list['content'] = _content_filter($content_list['content'], $variables['request']['filter']);
+
+    if (!empty($variables['request']['filter']['author']) && isset($content_list['authors'][$variables['request']['filter']['author']])) {
+      $filtered_author = $content_list['authors'][$variables['request']['filter']['author']];
+      _content_process_urls($filtered_author);
+      $variables['filtered_author'] = $filtered_author;
+    }
   }
 
   // Try to use handler for type-specific processing
@@ -91,6 +100,10 @@ function content_serve_preprocess_edit(&$path_data, &$variables) {
   // Pass content type config to template
   $variables['config'] = $GLOBALS['config'];
 
+  // Load authors list for dropdown
+  $author_list = list_content('author', false);
+  $variables['authors'] = empty($author_list['content']) ? [] : $author_list['content'];
+  
   // Extract error from query string if present
   if (!empty($variables['request']['error'])) {
     $variables['error'] = $variables['request']['error'];

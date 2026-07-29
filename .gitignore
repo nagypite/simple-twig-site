@@ -4,3 +4,4 @@ log/*
 .scss-snapshots/*
 config/users.php
 config/secrets.php
+.env

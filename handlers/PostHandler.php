@@ -33,4 +33,16 @@ class PostHandler extends BaseContentHandler {
       }
     }
   }
+  
+  /**
+   * Get redirect URL after successful save
+   * For posts, redirect to listing page instead of view page
+   * @param array $result Save result containing 'id' and 'stub'
+   * @param string $base_path Base path for the content type
+   * @return string Redirect URL
+   */
+  public function getRedirectUrlAfterSave($result, $base_path) {
+    // Redirect to listing page instead of view page
+    return '/'.$base_path;
+  }
 }

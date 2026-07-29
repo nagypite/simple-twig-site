@@ -1,3 +1,6 @@
+# Set PHP upload limits (must be set before any processing)
+php_value upload_max_filesize 5M
+php_value post_max_size 5M
 
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME}  !-f

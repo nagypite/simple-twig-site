@@ -10,31 +10,51 @@ require_once __DIR__ . '/content.php';
  * @return bool
  */
 function index_serve_preprocess(&$path_data, &$variables) {
-  // Load recent posts for index page
-  $post_list = list_content('post', false);
-  $recent_posts = [];
+  // Load recent events for index page
+  $event_list = list_content('event', false);
+  $recent_events = [];
+  $feature_list = list_content('feature', false);
+  $recent_features = [];
   
-  if (!empty($post_list['content'])) {
-    // Get first 2 posts (already sorted by date, newest first)
-    $posts = array_slice($post_list['content'], 0, 2, true);
+  if (!empty($event_list['content'])) {
+    // Get first 2 events (already sorted by date, newest first)
+    $events = array_slice($event_list['content'], 0, 2, true);
     
-    // Find menu item for posts to process URLs correctly
-    $post_menu_item = null;
+    // Find menu item for events to process URLs correctly
+    $event_menu_item = null;
     foreach ($GLOBALS['config']['menu'] as $menu_item) {
-      if (isset($menu_item['content_type']) && $menu_item['content_type'] === 'post') {
-        $post_menu_item = $menu_item;
+      if (isset($menu_item['content_type']) && $menu_item['content_type'] === 'event') {
+        $event_menu_item = $menu_item;
         break;
       }
     }
     
-    // Process URLs for each post
-    foreach ($posts as &$post) {
-      _content_process_urls($post, $post_menu_item);
-      $recent_posts[] = $post;
+    // Process URLs for each event
+    foreach ($events as &$event) {
+      _content_process_urls($event, $event_menu_item);
+      $recent_events[] = $event;
     }
   }
-  
-  $variables['recent_posts'] = $recent_posts;
+  $variables['recent_events'] = $recent_events;
+
+  if (!empty($feature_list['content'])) {
+    $features = array_slice($feature_list['content'], 0, 3, true);
+
+    $feature_menu_item = null;
+    foreach ($GLOBALS['config']['menu'] as $menu_item) {
+      if (isset($menu_item['content_type']) && $menu_item['content_type'] === 'feature') {
+        $feature_menu_item = $menu_item;
+        break;
+      }
+    }
+
+    foreach ($features as &$feature) {
+      _content_process_urls($feature, $feature_menu_item);
+      $recent_features[] = $feature;
+    }
+  }
+
+  $variables['recent_features'] = $recent_features;
   
   // Load index gallery for carousel by stub 'index-gallery'
   $index_gallery = get_content_by_stub('gallery', 'index-gallery');

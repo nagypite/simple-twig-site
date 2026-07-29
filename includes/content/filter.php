@@ -32,6 +32,15 @@ function _content_filter_content($content, $filter) {
     }
   }
 
+  if (!empty($filter['author'])) {
+    if (empty($content['author_id'])) {
+      return false;
+    }
+    if ($content['author_id'] != $filter['author']) {
+      return false;
+    }
+  }
+
   $content_date_unix = $content['date'] ? strtotime($content['date']) : 0;
   if (!empty($filter['date_from'])) {
     $date_from_unix = strtotime($filter['date_from']);

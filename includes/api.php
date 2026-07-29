@@ -6,13 +6,15 @@
  * @return array
  */
 function get_content_type_roles($content_type) {
-  $content_type_config = $GLOBALS['config']['content_types'][$content_type] ?? null;
+  $role_map = [
+    'article' => ['admin', 'article'],
+    'author' => ['admin', 'article'],
+    'event' => ['admin', 'event'],
+    'newsletter' => ['admin', 'newsletter'],
+    'gallery' => ['admin', 'gallery'],
+  ];
   
-  if ($content_type_config && isset($content_type_config['roles'])) {
-    return $content_type_config['roles'];
-  }
-  
-  return ['admin'];
+  return $role_map[$content_type] ?? ['admin'];
 }
 
 /**

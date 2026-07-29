@@ -29,6 +29,11 @@ $config['menu'] = include('menu.php');
 
 $config['content_types'] = include('content_types.php');
 
+// Contact form configuration (optional; copy contact.php.example to contact.php)
+if (file_exists(__DIR__ . '/contact.php')) {
+    $config['contact_forms'] = include(__DIR__ . '/contact.php');
+}
+
 // Markdown processing configuration
 $config['markdown'] = [
   'image_class' => 'img-fluid rounded d-block mx-auto',

@@ -22,7 +22,11 @@ function _prepare_metadata($type, $post_data, $content_type_config) {
     if ($field === 'content') {
       continue;
     }
-    $meta[$field] = $post_data[$field];
+    if ($field === 'author_id') {
+      $meta['author_id'] = (int)$post_data['author_id'];
+    } else {
+      $meta[$field] = $post_data[$field];
+    }
   }
   
   // Let handler process optional metadata fields
@@ -34,12 +38,12 @@ function _prepare_metadata($type, $post_data, $content_type_config) {
     $meta['image'] = $post_data['image'];
   }
   if (!empty($post_data['abstract_cn'])) {
-    $meta['abstract_cn'] = $post_data['abstract_cn'];
+    $meta['abstract_cn'] = _markdown_to_plain_text($post_data['abstract_cn']);
   }
 
   // Save abstract if it's set or generate it from content if abstract_length is set
   if (!empty($post_data['abstract'])) {
-    $meta['abstract'] = $post_data['abstract'];
+    $meta['abstract'] = _markdown_to_plain_text($post_data['abstract']);
   } else if (!empty($content_type_config['abstract_length'])) {
     $meta['abstract'] = _generate_markdown_safe_abstract($post_data['content'] ?? '', $content_type_config['abstract_length']);
   }
@@ -353,10 +357,11 @@ function content_handle_save($path_data, &$variables) {
   if (!empty($required_fields)) {
     // Field name translations for error messages
     $field_labels = [
-      'title' => 'Title',
-      'date' => 'Date',
-      'stub' => 'Stub',
-      'content' => 'Content',
+      'title' => 'Cím',
+      'date' => 'Dátum',
+      'author_id' => 'Szerző',
+      'stub' => 'URL azonosító (stub)',
+      'content' => 'Tartalom',
     ];
     
     // Validate required fields with better error messages
@@ -365,7 +370,7 @@ function content_handle_save($path_data, &$variables) {
       if (!isset($_POST[$field]) || $_POST[$field] === '' || $_POST[$field] === null) {
         $field_label = $field_labels[$field] ?? $field;
         log_debug('content_handle_save', 'Missing required field', $field, 'POST keys:', array_keys($_POST), 'required_fields:', $required_fields);
-        $variables['error'] = $field_label . ' is required';
+        $variables['error'] = $field_label . ' megadása kötelező';
         return false;
       }
     }
@@ -375,7 +380,7 @@ function content_handle_save($path_data, &$variables) {
   
   if ($result === false) {
     log_debug('content_handle_save', 'content_save failed', $content_type);
-    $variables['error'] = 'The save failed. Please check that all required fields are filled in.';
+    $variables['error'] = 'A mentés sikertelen. Ellenőrizze, hogy minden kötelező mező ki van-e töltve.';
     return false;
   }
   
@@ -411,7 +416,7 @@ function content_handle_delete($path_data, &$variables) {
   $content = get_content($content_type, $content_id, false);
   if (empty($content) || empty($content['path'])) {
     log_debug('content_handle_delete', 'Content not found', $content_type, $content_id);
-    $variables['error'] = 'The content was not found';
+    $variables['error'] = 'A tartalom nem található';
     return false;
   }
   
@@ -420,7 +425,7 @@ function content_handle_delete($path_data, &$variables) {
   if (file_exists($file_path)) {
     if (!unlink($file_path)) {
       log_debug('content_handle_delete', 'Failed to delete file', $file_path);
-      $variables['error'] = 'The file deletion failed';
+      $variables['error'] = 'A fájl törlése sikertelen';
       return false;
     }
     log_debug('content_handle_delete', 'File deleted', $file_path);

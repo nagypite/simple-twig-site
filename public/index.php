@@ -1,6 +1,12 @@
 <?php
 
-error_reporting(E_ALL);
+// Set upload limits FIRST, before any other processing
+// Note: ini_set may not work for upload_max_filesize/post_max_size in all PHP configs
+// .htaccess directives are also set as a fallback
+@ini_set('upload_max_filesize', '5M');
+@ini_set('post_max_size', '5M');
+
+error_reporting(E_ALL ^ E_DEPRECATED);
 
 ini_set('display_startup_errors', 1);
 ini_set('display_errors', 1);

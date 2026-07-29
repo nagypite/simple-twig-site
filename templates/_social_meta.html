@@ -1,0 +1,35 @@
+<link rel="canonical" href="{{ meta.canonical|default(url)|e('html_attr') }}">
+{% if meta.og is defined %}
+<meta property="og:type" content="{{ meta.og.type|default('website')|e('html_attr') }}">
+<meta property="og:site_name" content="{{ meta.og.site_name|e('html_attr') }}">
+<meta property="og:title" content="{{ meta.og.title|e('html_attr') }}">
+<meta property="og:description" content="{{ meta.og.description|e('html_attr') }}">
+<meta property="og:url" content="{{ meta.og.url|e('html_attr') }}">
+{% if meta.og.locale is defined %}
+<meta property="og:locale" content="{{ meta.og.locale|e('html_attr') }}">
+{% endif %}
+{% if meta.og.image is defined %}
+<meta property="og:image" content="{{ meta.og.image|e('html_attr') }}">
+{% if meta.og.image_width is defined %}
+<meta property="og:image:width" content="{{ meta.og.image_width }}">
+<meta property="og:image:height" content="{{ meta.og.image_height }}">
+{% endif %}
+{% if meta.og.image_type is defined %}
+<meta property="og:image:type" content="{{ meta.og.image_type|e('html_attr') }}">
+{% endif %}
+{% if meta.og.image_alt is defined %}
+<meta property="og:image:alt" content="{{ meta.og.image_alt|e('html_attr') }}">
+{% endif %}
+{% endif %}
+{% if meta.og.published_time is defined %}
+<meta property="article:published_time" content="{{ meta.og.published_time|e('html_attr') }}">
+{% endif %}
+{% endif %}
+{% if meta.twitter is defined %}
+<meta name="twitter:card" content="{{ meta.twitter.card|default('summary')|e('html_attr') }}">
+<meta name="twitter:title" content="{{ meta.twitter.title|e('html_attr') }}">
+<meta name="twitter:description" content="{{ meta.twitter.description|e('html_attr') }}">
+{% if meta.twitter.image is defined %}
+<meta name="twitter:image" content="{{ meta.twitter.image|e('html_attr') }}">
+{% endif %}
+{% endif %}

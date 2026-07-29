@@ -1,0 +1,34 @@
+<?php
+
+/**
+ * Optional contact form definitions.
+ * Copy to contact.php and wire paths into pages/menu as needed.
+ * Loaded automatically from config/base.php when present.
+ */
+return [
+    'example_contact' => [
+        'path' => 'contact',
+        'fields' => [
+            'name' => [
+                'label' => 'Name',
+                'required' => true,
+                'type' => 'string',
+            ],
+            'email' => [
+                'label' => 'Email',
+                'required' => true,
+                'type' => 'email',
+            ],
+            'message' => [
+                'label' => 'Message',
+                'required' => true,
+                'type' => 'textarea',
+            ],
+        ],
+        'success_path' => 'contact/thanks',
+        'notify' => [
+            // 'to' => ['you@example.com'],
+            // 'subject' => 'New contact form submission',
+        ],
+    ],
+];

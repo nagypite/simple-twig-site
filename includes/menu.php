@@ -29,38 +29,23 @@ function build_menu($path_data = NULL) {
       return false;
     }
     
-    // Filter by show_for - handle special tokens (_guest, _user) and regular roles
+    // Filter by show_for - only show if user has one of the required roles
     if (!empty($item['show_for']) && is_array($item['show_for'])) {
       $user = current_user();
-      $is_authenticated = !empty($user);
+      if (empty($user)) {
+        return false; // User not authenticated
+      }
       $user_roles = $user['roles'] ?? [];
-      
-      $should_show = false;
-      
-      foreach ($item['show_for'] as $required_condition) {
-        // Handle special token: _guest (show only when NOT authenticated)
-        if ($required_condition === '_guest') {
-          if (!$is_authenticated) {
-            $should_show = true;
-            break;
-          }
-        }
-        // Handle special token: _user (show only when authenticated)
-        elseif ($required_condition === '_user') {
-          if ($is_authenticated) {
-            $should_show = true;
-            break;
-          }
-        }
-        // Handle regular role: show if user has this role
-        elseif ($is_authenticated && in_array($required_condition, $user_roles)) {
-          $should_show = true;
+      // Check if user has any of the required roles
+      $has_required_role = false;
+      foreach ($item['show_for'] as $required_role) {
+        if (in_array($required_role, $user_roles)) {
+          $has_required_role = true;
           break;
         }
       }
-      
-      if (!$should_show) {
-        return false;
+      if (!$has_required_role) {
+        return false; // User doesn't have required role
       }
     }
     
@@ -129,20 +114,21 @@ function build_secondary_menu($path_data = NULL) {
   $children = $parent_menu_item['children'];
 
   if (is_array($children)) {
+    $visible = array_filter($children, function($child) {
+      return empty($child['hidden']);
+    });
     return array_map(function($item) use ($path_data, $parent_menu_item) {
       return process_menu_item($item, $path_data, $parent_menu_item);
-    }, $children);
+    }, $visible);
   }
   else if (is_string($children) && strpos($children, 'content:') === 0) {
     $content_type = substr($children, 8);
-    $content_list = list_content($content_type);
-    $content_items = $content_list['content'] ?? [];
     return array_map(function($item) use ($path_data, $content_type, $parent_menu_item) {
       return process_menu_item([
         'label' => $item['title'] ?? 'N/A',
         'path' => $parent_menu_item['path'] . '/' . ($item['stub'] ?? 'na'),
       ], $path_data);
-    }, $content_items);
+    }, list_content($content_type));
   }
   return [];
 }

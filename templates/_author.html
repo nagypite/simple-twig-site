@@ -1,0 +1,18 @@
+<h3 class="text-center mb-5">{{ author.title }}</h3>
+<div class="row">
+    <div class="col-md-3">
+        <img src="{% if author.image_url %}{{ author.image_url }}{% else %}/assets/images/author-default-image.jpg{% endif %}" alt="{{ author.title }}" class="img-fluid w-100">
+    </div>
+    <div class="col-md">
+        <div class="row">
+            <div class="col-md">
+                {{ author.abstract|default('') }}
+            </div>
+            {% if author.abstract_cn %}
+            <div class="col-md" lang="zh">
+                {{ author.abstract_cn|default('') }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

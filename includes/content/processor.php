@@ -27,24 +27,16 @@ function _content_process_markdown(&$content, $file_path, $preprocess_config) {
     $markdownAdapter = new MichelfMarkdownAdapter($markdown_config);
   }
   
-  // Process abstract if 'abstract' is in preprocess config
-  if (in_array('abstract', $preprocess_config) && !empty($content['abstract'])) {
-    $content['abstract_html'] = $markdownAdapter->convert(
-      $content['abstract'],
-      $file_path,
-      'abstract'
-    );
+  // Abstracts are plain text (markdown stripped on load)
+  if (in_array('abstract', $preprocess_config)) {
+    if (!empty($content['abstract'])) {
+      $content['abstract'] = _markdown_to_plain_text($content['abstract']);
+    }
+    if (!empty($content['abstract_cn'])) {
+      $content['abstract_cn'] = _markdown_to_plain_text($content['abstract_cn']);
+    }
   }
-  
-  // Process abstract_cn if 'abstract' is in preprocess config
-  if (in_array('abstract', $preprocess_config) && !empty($content['abstract_cn'])) {
-    $content['abstract_cn_html'] = $markdownAdapter->convert(
-      $content['abstract_cn'],
-      $file_path,
-      'abstract_cn'
-    );
-  }
-  
+
   // Process content if 'content' is in preprocess config
   if (in_array('content', $preprocess_config) && !empty($content['content'])) {
     $content['content_html'] = $markdownAdapter->convert(

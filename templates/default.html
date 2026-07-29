@@ -5,15 +5,16 @@
     <meta charset="utf-8">
     {% block meta %}
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="{{meta.description}}">
-    <meta name="author" content="{{meta.author}}">
+    <meta name="description" content="{{ meta.description|e('html_attr') }}">
+    <meta name="author" content="{{ meta.author|e('html_attr') }}">
     <meta name="generator" content="simple-twig-site">
+    {% include "_social_meta.html" %}
     <title>{% block title %}{{sitename}}{% endblock %}</title>
     {% endblock %}
 
     {% block css %}
-    <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
-    <link href="/assets/css/custom.css" rel="stylesheet">
+    <link href="{{ asset('/assets/css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('/assets/css/custom.css') }}" rel="stylesheet">
     <style>
       /* Force scrollbar to always be visible to prevent layout shifts */
       html {
@@ -24,7 +25,7 @@
     {% endblock %}
 
   </head>
-  <body class="path-{{path}} {% block body_class %}bamboo{% endblock %} pt-4 pb-5">
+  <body class="path-{{path|replace({'/':'-'})}} {% block body_class %}bamboo{% endblock %} pt-4 pb-5">
     <div class="dropdown position-fixed bottom-0 end-0 mb-3 me-3 bd-mode-toggle">
       <button class="btn btn-bd-primary py-2 dropdown-toggle d-flex align-items-center"
               id="bd-theme"
@@ -91,7 +92,8 @@
   {% endblock %}
 
 {% block js %}
-<script src="/assets/js/bootstrap.bundle.min.js"></script>
+<script src="{{ asset('/assets/js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ asset('/assets/js/color-modes.js') }}"></script>
 {% endblock %}
 
     </body>

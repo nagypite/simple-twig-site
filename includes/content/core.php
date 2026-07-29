@@ -1,7 +1,8 @@
 <?php
 
-// Ensure YAML functions are available
+// Ensure YAML and abstract helpers are available
 require_once __DIR__ . '/yaml.php';
+require_once __DIR__ . '/utils.php';
 
 define('CONTENT_CACHE_PATH', CACHE_PATH.'/content');
 
@@ -31,7 +32,11 @@ function list_content($type, $preprocess = true) {
   
   // Check if cache file exists and return cached data
   if (file_exists($cache_file)) {
-    return include $cache_file;
+    $content_result = include $cache_file;
+    if (!empty($content_result['content'])) {
+      _content_normalize_abstracts($content_result['content']);
+    }
+    return $content_result;
   }
   
   // Generate content from markdown files
@@ -52,6 +57,11 @@ function list_content($type, $preprocess = true) {
       $keywords = array_unique($keywords);
       $content_result['keywords'] = sort_intl($keywords);
     }
+
+    if (isset($content_type_config['preprocess']) && in_array('authors', $content_type_config['preprocess'])) {
+      $author_list = list_content('author', false);
+      $content_result['authors'] = empty($author_list['content']) ? [] : $author_list['content'];
+    }
   }
   
   // Ensure cache directory exists
@@ -62,8 +72,29 @@ function list_content($type, $preprocess = true) {
   // Write cache file
   $cache_content = "<?php\nreturn " . var_export($content_result, true) . ";\n";
   file_put_contents($cache_file, $cache_content);
-  
+
+  if (!empty($content_result['content'])) {
+    _content_normalize_abstracts($content_result['content']);
+  }
+
   return $content_result;
+}
+
+/**
+ * Ensure listing cache entries use plain-text abstracts.
+ * @param array $content_items
+ * @return void
+ */
+function _content_normalize_abstracts(&$content_items) {
+  foreach ($content_items as &$item) {
+    if (!empty($item['abstract'])) {
+      $item['abstract'] = _markdown_to_plain_text($item['abstract']);
+    }
+    if (!empty($item['abstract_cn'])) {
+      $item['abstract_cn'] = _markdown_to_plain_text($item['abstract_cn']);
+    }
+  }
+  unset($item);
 }
 
 /**
@@ -125,6 +156,13 @@ function _process_file($file, $type, $include_content = false) {
           'type' => $type,
           'path' => $relative_path,
         ]);
+
+        if (!empty($file_data['abstract'])) {
+          $file_data['abstract'] = _markdown_to_plain_text($file_data['abstract']);
+        }
+        if (!empty($file_data['abstract_cn'])) {
+          $file_data['abstract_cn'] = _markdown_to_plain_text($file_data['abstract_cn']);
+        }
 
         if ($include_content) {
             // Remove frontmatter from content

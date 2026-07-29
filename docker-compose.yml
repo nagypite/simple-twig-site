@@ -12,3 +12,4 @@ services:
     image: php:8.3-fpm-alpine # or your preferred version
     volumes:
       - ./:/var/www/html
+      - ./php.ini:/usr/local/etc/php/conf.d/uploads.ini
